@@ -79,7 +79,7 @@ h1, h2, h3 { text-wrap: balance; font-weight: 700; }
 @media (min-width: 60em) {
   .site-head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); padding-top: 2rem; }
   .wordmark { grid-column: 1 / 5; }
-  .nav-wide { display: block; grid-column: 9 / 11; }
+  .nav-wide { display: block; grid-column: 7 / 11; justify-self: end; }
   .site-head .button { grid-column: 11 / 13; justify-self: end; }
   .nav-phone { display: none; }
 }

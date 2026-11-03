@@ -377,6 +377,9 @@
   // ---------- 내 정보 ----------
   if (page === 'me') {
     let redraw = null;
+    // The landing's 로그인 link lands here as /me#login: open the login box straight away.
+    const wantLogin = location.hash === '#login';
+    if (wantLogin) history.replaceState(null, '', location.pathname + location.search);
     const gate = (text, admin) => {
       $('#me-gate').hidden = false; $('#me-body').hidden = true;
       if (text) {
@@ -390,7 +393,7 @@
     boot(async (R, err) => {
       if (err) { fill('#me-sub', esc(err.message === 'not_configured' ? offline : why(err))); return; }
       const me = await D.me();
-      if (!me) { fill('#me-sub', '로그인하면 내 기록을 모아서 보여 줘요.'); gate(); return; }
+      if (!me) { fill('#me-sub', '로그인하면 내 기록을 모아서 보여 줘요.'); gate(); if (wantLogin) openLogin(); return; }
       const m = me.member_id && R.byId[me.member_id];
       if (!m) {
         fill('#me-sub', `휴대폰 끝자리 ${esc(me.last4 || '')}로 로그인했어요.`);
