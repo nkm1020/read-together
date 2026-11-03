@@ -129,7 +129,9 @@ main.column { padding: 36px 0 80px; }
 .count[aria-pressed="true"] span { color: var(--accent-ink); }
 
 /* ---------- tables ---------- */
-.table-frame { overflow-x: auto; }
+/* position: relative keeps absolutely placed children (the .sr-only header labels) inside the scroller;
+   without it they sit at the table's far edge and widen the whole page on a phone. */
+.table-frame { position: relative; overflow-x: auto; }
 table.data { width: 100%; border-collapse: collapse; }
 table.data th { height: 36px; padding: 0 12px; text-align: left; font-size: var(--fs-small); font-weight: 500; color: var(--faint); white-space: nowrap; }
 table.data td { height: var(--row-height); padding: 0 12px; box-shadow: inset 0 1px 0 var(--rule); white-space: nowrap; }
@@ -284,5 +286,6 @@ dialog.login .muted { margin-top: -8px; }
   .six > * { grid-column: 1 / -1; }
   .counts { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: minmax(7.5rem, 1fr); overflow-x: auto; }
   .two, .attend-list { grid-template-columns: minmax(0, 1fr); }
+  .input { font-size: 16px; } /* under 16px, iOS Safari zooms the page in on every tap into a field */
   .clip-row td:nth-child(2), #clips th:nth-child(2) { display: none; }
 }
