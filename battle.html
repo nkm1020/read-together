@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>배틀 참여 · Read Together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Black+Han+Sans&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  /* Made for the phone in a member's hand; on a laptop it keeps the same narrow column. */
+  .phone { width: min(100% - 32px, 460px); margin-inline: auto; padding: 28px 0 48px; display: grid; gap: 16px; align-content: start; }
+  .phone h1 { font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 34px; }
+  .phone .lede { color: var(--muted); font-size: 15px; line-height: 22px; }
+  .full { width: 100%; height: 52px; font-size: 16px; }
+  #code { height: 72px; font-family: var(--display); font-size: 36px; letter-spacing: 0.35em; text-align: center; padding-left: 0.35em; }
+  #code::placeholder { font-family: var(--font); font-size: 16px; letter-spacing: 0; }
+  .status { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+  .play-title { font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 30px; }
+  .timer { font-family: var(--display); font-size: 44px; line-height: 44px; font-variant-numeric: tabular-nums; }
+  .rounds { display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); }
+  #p-strip .strip { grid-auto-columns: minmax(0, 1fr); width: 100%; gap: 4px; }
+  #p-strip .strip i { height: 24px; }
+  #p-strip .strip i.miss::after { margin-top: 11px; }
+  .phone textarea { min-height: 140px; font-size: 17px; }
+  #p-state { font-size: 15px; line-height: 23px; }
+</style>
+</head>
+<body data-page="battle">
+<header class="topbar">
+  <div class="column">
+    <a class="mark" href="/" aria-label="Read Together 홈"><span>Read</span><i aria-hidden="true"></i><span>Together</span></a>
+    <nav class="topnav" aria-label="주 메뉴">
+      <a href="/sessions">회차</a>
+      <a href="/ranking">랭킹</a>
+      <a href="/battle" aria-current="page">배틀</a>
+    </nav>
+    <div class="end"><a href="/">소개</a><span class="account" data-account><a href="https://docs.google.com/forms/d/e/1FAIpQLSeUK2l8nBtd7qEa8zQUbEIgW0TBEwaIMR9y7j-i5d9013xdkg/viewform?usp=header">신청하기</a></span></div>
+    <details class="menu"><summary>메뉴</summary><nav aria-label="주 메뉴"><a href="/sessions">회차</a><a href="/ranking">랭킹</a><a href="/battle">배틀</a><a href="/">소개</a><div class="account" data-account><a href="https://docs.google.com/forms/d/e/1FAIpQLSeUK2l8nBtd7qEa8zQUbEIgW0TBEwaIMR9y7j-i5d9013xdkg/viewform?usp=header">신청하기</a></div></nav></details>
+  </div>
+</header>
+
+<main class="phone">
+  <h1 id="b-title">배틀 입장</h1>
+  <p data-step="wait" class="faint">불러오는 중이에요.</p>
+
+  <section id="need-login" data-step="login" class="stack" hidden>
+    <p class="lede" id="need-login-text">신청할 때 적은 휴대폰 번호로 로그인하면 입장할 수 있어요. 점수는 로그인한 내 이름으로 쌓여요.</p>
+    <button type="button" class="btn btn-primary full" data-login>로그인</button>
+  </section>
+
+  <form id="join" data-step="join" class="stack" hidden novalidate>
+    <p class="lede">진행자 화면에 뜬 네 자리 입장 코드를 넣어 주세요.</p>
+    <p id="join-who"></p>
+    <div class="field">
+      <label for="code">입장 코드</label>
+      <input class="input num" id="code" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="네 자리 숫자">
+    </div>
+    <p class="error" id="code-error" role="alert"></p>
+    <button type="submit" class="btn btn-primary full">입장</button>
+  </form>
+
+  <form id="play" data-step="play" class="stack" hidden novalidate>
+    <div class="status">
+      <div><p class="play-title" id="p-round"></p><p id="p-name" style="margin-top:6px"></p></div>
+      <p class="timer" id="p-timer" aria-label="남은 시간">대기</p>
+    </div>
+    <div class="rounds" aria-label="내 라운드"><div id="p-strip"></div><div id="p-key"></div></div>
+    <div class="card"><p id="p-state" aria-live="polite">불러오는 중이에요.</p></div>
+    <div class="field">
+      <label for="answer">들은 문장</label>
+      <textarea class="input" id="answer" lang="en" autocapitalize="off" spellcheck="false" placeholder="들은 그대로 입력하세요. 대소문자와 문장부호는 채점하지 않아요." disabled></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary full" disabled>제출</button>
+    <p class="faint" id="p-standing"></p>
+    <button type="button" class="btn full" id="leave">입장 코드 다시 넣기</button>
+  </form>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

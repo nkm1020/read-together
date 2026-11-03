@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회차 · Read Together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Black+Han+Sans&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .object { display: flex; align-items: center; gap: 18px; padding: 16px; min-height: 102px; }
+  .object img { width: 56px; height: 70px; object-fit: cover; filter: grayscale(1); flex: none; }
+  .object h1 { font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 34px; }
+  .object .meta { margin-top: 4px; color: var(--muted); font-size: 14px; }
+  .object .actions { margin-left: auto; display: flex; gap: 8px; }
+  .quotes { display: grid; }
+  .quotes li { display: grid; gap: 8px; padding: 18px 0; box-shadow: inset 0 1px 0 var(--rule); }
+  .quotes li:first-child { box-shadow: none; padding-top: 2px; }
+  .quotes blockquote { font-size: 17px; line-height: 26px; font-weight: 500; }
+  .quotes .who { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .quotes .who i { width: 22px; height: 22px; font-size: 11px; }
+  .quotes p.muted { font-size: 14px; }
+  .next h3 { font-size: 16px; font-weight: 600; line-height: 22px; }
+  .next p { margin-top: 6px; color: var(--muted); }
+  .next .nested { margin-top: 14px; }
+  .next { display: flex; flex-direction: column; }
+  .next .next-foot { margin-top: auto; padding-top: 20px; }
+  td.wrap { min-width: 16rem; }
+  .write { margin-top: 20px; padding: 20px; background: var(--raised); display: grid; gap: 14px; }
+  .write h3 { font-size: 16px; font-weight: 600; }
+  .write-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .write-closed { margin-top: 20px; padding: 16px 20px; background: var(--raised); color: var(--muted); }
+  .closed-note { display: inline-flex; align-items: center; justify-content: center; height: var(--control-height); padding: 0 16px; background: var(--raised); color: var(--muted); font-weight: 600; white-space: nowrap; }
+  @media (max-width: 640px) {
+    .object { flex-wrap: wrap; }
+    .object h1 { font-size: 24px; line-height: 30px; }
+    .object .actions { margin-left: 0; width: 100%; }
+    .object .actions .btn, .object .actions .closed-note { flex: 1; height: 44px; }
+    #all th:nth-child(2), #all td:nth-child(2), #all th:nth-child(3), #all td:nth-child(3) { display: none; }
+    td.wrap { min-width: 0; }
+  }
+</style>
+</head>
+<body data-page="sessions">
+<header class="topbar">
+  <div class="column">
+    <a class="mark" href="/" aria-label="Read Together 홈"><span>Read</span><i aria-hidden="true"></i><span>Together</span></a>
+    <nav class="topnav" aria-label="주 메뉴">
+      <a href="/sessions" aria-current="page">회차</a>
+      <a href="/ranking">랭킹</a>
+      <a href="/battle">배틀</a>
+    </nav>
+    <div class="end"><a href="/">소개</a><span class="account" data-account><a href="https://docs.google.com/forms/d/e/1FAIpQLSeUK2l8nBtd7qEa8zQUbEIgW0TBEwaIMR9y7j-i5d9013xdkg/viewform?usp=header">신청하기</a></span></div>
+    <details class="menu"><summary>메뉴</summary><nav aria-label="주 메뉴"><a href="/sessions">회차</a><a href="/ranking">랭킹</a><a href="/battle">배틀</a><a href="/">소개</a><div class="account" data-account><a href="https://docs.google.com/forms/d/e/1FAIpQLSeUK2l8nBtd7qEa8zQUbEIgW0TBEwaIMR9y7j-i5d9013xdkg/viewform?usp=header">신청하기</a></div></nav></details>
+  </div>
+</header>
+
+<main class="column">
+  <section class="card object" aria-labelledby="obj-title">
+    <img id="obj-cover" src="assets/reader-square.jpg" width="800" height="800" alt="" style="object-position: 38% 40%">
+    <div>
+      <h1 id="obj-title">회차</h1>
+      <p class="meta" id="obj-meta">기록을 불러오는 중이에요.</p>
+    </div>
+    <div class="actions" id="obj-actions"></div>
+  </section>
+
+  <nav class="tabs" aria-label="회차 보기">
+    <a href="#now" aria-current="page">이번 회차</a>
+    <a href="#all-title">모든 회차</a>
+  </nav>
+
+  <div class="six" id="now">
+    <dl class="kpi span-6" id="kpis" style="--cells:3"></dl>
+
+    <section class="card span-4" aria-labelledby="last-title">
+      <div class="card-head"><h2 id="last-title">남긴 문장</h2><span class="meta" id="last-meta"></span></div>
+      <p class="muted" style="margin-bottom:12px">멤버들이 원문에서 고른 인상 깊은 문장이에요.</p>
+      <ul class="quotes" id="sentences"></ul>
+      <form id="write" class="write" hidden>
+        <h3>내 문장 남기기</h3>
+        <p class="muted" id="w-who" style="margin:0"></p>
+        <div class="field"><label for="w-body">인상 깊은 문장</label><textarea class="input" id="w-body" lang="en" rows="3" placeholder="원문에서 그대로 옮겨 주세요"></textarea></div>
+        <div class="field"><label for="w-reason">고른 이유 (선택)</label><input class="input" id="w-reason" maxlength="200" placeholder="한두 줄이면 충분해요"></div>
+        <div class="write-foot"><button type="submit" class="btn btn-primary">남기기</button><p class="muted" id="w-msg" role="status"></p></div>
+      </form>
+      <div id="write-login" class="write" hidden>
+        <h3>내 문장 남기기</h3>
+        <p class="muted" id="write-login-text" style="margin:0">신청할 때 적은 휴대폰 번호로 로그인하면 내 이름으로 문장을 남길 수 있어요.</p>
+        <div class="write-foot"><button type="button" class="btn btn-primary" data-login>로그인</button></div>
+      </div>
+      <p id="write-closed" class="write-closed" hidden></p>
+    </section>
+
+    <section class="card span-2 next" aria-labelledby="next-head">
+      <div class="card-head"><h2 id="next-head">다음 회차</h2></div>
+      <h3 id="next-title">–</h3>
+      <p id="next-when">–</p>
+      <div class="nested"><p id="next-text" style="margin:0">–</p></div>
+      <p class="next-foot"><a class="card-link" href="#all-title">모든 회차 보기</a></p>
+    </section>
+
+    <section class="card span-6" aria-labelledby="all-title">
+      <div class="card-head"><h2 id="all-title">모든 회차</h2><span class="meta">홀수 회차는 Reading, 짝수 회차는 Dictation</span></div>
+      <div class="table-frame">
+        <table class="data" id="all">
+          <thead><tr><th>회차</th><th>날짜</th><th>종류</th><th>원문 또는 결과</th><th class="r">참여</th><th class="r">상태</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

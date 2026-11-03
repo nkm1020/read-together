@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>랭킹 · Read Together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Black+Han+Sans&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  #board td:nth-child(2) { width: 28%; }
+  #board td b { font-weight: 700; }
+  .phone-only { display: none; }
+  .wins { display: grid; gap: 6px; justify-items: end; }
+  .win { display: inline-flex; align-items: center; gap: 8px; }
+  .win .who { font-weight: 500; }
+  .rules { display: grid; gap: 10px; color: var(--muted); }
+  .rules b { color: var(--text); font-weight: 600; }
+  @media (max-width: 640px) {
+    .phone-only { display: block; }
+    .wide-only { display: none; }
+    #board-list .rank { display: inline-block; width: 24px; }
+    #board-list .r { text-align: right; }
+    #board-list li.mine { background: var(--accent-soft); margin-inline: -12px; padding-inline: 12px; }
+  }
+</style>
+</head>
+<body data-page="ranking">
+<header class="topbar">
+  <div class="column">
+    <a class="mark" href="/" aria-label="Read Together 홈"><span>Read</span><i aria-hidden="true"></i><span>Together</span></a>
+    <nav class="topnav" aria-label="주 메뉴">
+      <a href="/sessions">회차</a>
+      <a href="/ranking" aria-current="page">랭킹</a>
+      <a href="/battle">배틀</a>
+    </nav>
+    <div class="end"><a href="/">소개</a><span class="account" data-account><a href="https://docs.google.com/forms/d/e/1FAIpQLSeUK2l8nBtd7qEa8zQUbEIgW0TBEwaIMR9y7j-i5d9013xdkg/viewform?usp=header">신청하기</a></span></div>
+    <details class="menu"><summary>메뉴</summary><nav aria-label="주 메뉴"><a href="/sessions">회차</a><a href="/ranking">랭킹</a><a href="/battle">배틀</a><a href="/">소개</a><div class="account" data-account><a href="https://docs.google.com/forms/d/e/1FAIpQLSeUK2l8nBtd7qEa8zQUbEIgW0TBEwaIMR9y7j-i5d9013xdkg/viewform?usp=header">신청하기</a></div></nav></details>
+  </div>
+</header>
+
+<main class="column">
+  <div class="title-row">
+    <div>
+      <h1>랭킹</h1>
+      <p class="sub" id="finding">기록을 불러오는 중이에요.</p>
+    </div>
+    <a class="btn btn-primary" href="/dashboard">오늘 배틀 보기</a>
+  </div>
+
+  <div class="counts" style="--cells:3" role="group" aria-label="랭킹 보기">
+    <button type="button" class="count" data-view="all" aria-pressed="true"><span>전체</span><b id="n-all">–</b></button>
+    <button type="button" class="count" data-view="tue" aria-pressed="false"><span>화요일 그룹</span><b id="n-tue">–</b></button>
+    <button type="button" class="count" data-view="wed" aria-pressed="false"><span>수요일 그룹</span><b id="n-wed">–</b></button>
+  </div>
+
+  <div class="with-rail">
+    <section class="card" aria-labelledby="board-title">
+      <div class="card-head"><h2 id="board-title">누적 점수 · 전체</h2><span class="meta" id="board-meta">확정된 배틀 합계</span></div>
+      <div class="table-frame wide-only">
+        <table class="data" id="board">
+          <thead><tr><th>순위</th><th>이름</th><th>그룹</th><th class="r">커피</th><th class="r">누적</th><th><span class="sr-only">1위 대비</span></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <ul class="rows phone-only" id="board-list"></ul>
+    </section>
+
+    <aside class="rail" aria-label="회차별 기록">
+      <h2>회차별 1등</h2>
+      <div class="card"><ul class="rows" id="winners"></ul></div>
+      <h2>점수 계산</h2>
+      <div class="card rules">
+        <p>라운드마다 <b>정확도 100점</b>, <b>속도 20점</b>, <b>연속 정답 20점</b>, 최대 140점. 8라운드를 더해 회차 점수가 돼요.</p>
+        <p>그룹 1등은 커피 한 잔을 받아요. 전체 1등은 표시만 돼요.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
