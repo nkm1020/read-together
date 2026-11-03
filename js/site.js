@@ -1,4 +1,13 @@
-// Read Together — 1안. The live round: watch a film line, fill the blank, scored like the real battle.
+// Read Together — 1안. The landing stays static, so the menu only checks whether a login key is stored:
+// with one, 로그인 becomes 내 정보. /me checks the key itself and asks again if it has run out.
+(() => {
+  let signedIn = false;
+  try { signedIn = !!localStorage.getItem('rt-token'); } catch {}
+  if (!signedIn) return;
+  document.querySelectorAll('[data-account-link]').forEach((a) => { a.href = '/me'; a.textContent = '내 정보'; });
+})();
+
+// The live round: watch a film line, fill the blank, scored like the real battle.
 (() => {
   const root = document.getElementById('round');
   if (!root) return;
