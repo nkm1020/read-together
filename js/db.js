@@ -30,6 +30,11 @@ window.DB = (() => {
   const when = (s) => [s.tue_date && `화요일 ${day(s.tue_date)} 17:00`, s.wed_date && `수요일 ${day(s.wed_date)} 18:30`].filter(Boolean).join(', ');
   const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const weekday = { tue: '화', wed: '수' };
+  // The two groups read different articles (supabase/005_group_articles.sql). Null when that group does not meet.
+  const article = (s, g) => (s && s[`${g}_date`] ? {
+    grp: g, title: s[`${g}_article_title`], url: s[`${g}_article_url`], type: s[`${g}_article_type`], minutes: s[`${g}_article_minutes`],
+  } : null);
+  const articles = (s) => ['tue', 'wed'].map((g) => article(s, g)).filter(Boolean);
   const phoneText = (p) => (p || '').replace(/^(\d{3})(\d{3,4})(\d{4})$/, '$1-$2-$3');
 
   const must = ({ data, error }) => { if (error) throw error; return data; };
@@ -133,7 +138,7 @@ window.DB = (() => {
   };
 
   return {
-    ready, sb, groups, fmt, day, days, when, first, last, weekday, todayISO, phoneText, load,
+    ready, sb, groups, fmt, day, days, when, first, last, weekday, article, articles, todayISO, phoneText, load,
     rpc: async (fn, args) => must(await sb.rpc(fn, args)),
     me, forget, stillIn, login, logout,
     isAdmin: async () => !!((await me()) || {}).is_admin,
