@@ -210,39 +210,56 @@
   };
 
   // ---------- 랭킹 ----------
+  // The two groups battle on different clips, so each group has its own ranking. 종합 adds both groups up.
   if (page === 'ranking') {
-    let view = 'all', R = null, mineId = null;
-    D.me().then((m) => { mineId = m && m.member_id; draw(); });
+    let view = null, picked = false, R = null, mineId = null, myGrp = null;
+    D.me().then((m) => { mineId = m && m.member_id; myGrp = m && m.grp; draw(); });
     const draw = () => {
       if (!R) return;
-      const rows = view === 'all' ? R.standings : R.groupRank(view);
-      const n = (s) => (view === 'all' ? s.rank : s.grank);
-      $('#board-title').textContent = view === 'all' ? '누적 점수 · 전체' : `누적 점수 · ${D.groups[view].name} 그룹`;
-      $('#board-meta').textContent = R.battleNs.length ? `${R.battleNs.map((x) => x + '회차').join('·')} 배틀 합계, 불참은 –` : '확정된 배틀 합계';
-      $('#board thead tr').innerHTML = `<th>순위</th><th>이름</th><th>그룹</th>${R.battleNs.map((x) => `<th class="r">${x}회차</th>`).join('')}<th class="r">커피</th><th class="r">누적</th><th><span class="sr-only">1위 대비</span></th>`;
+      if (!picked) view = (mineId && R.byId[mineId] && R.byId[mineId].grp) || myGrp || 'all';
+      const all = view === 'all';
+      const scope = all ? '종합' : `${D.groups[view].name} 그룹`;
+      const rows = all ? R.standings : R.groupRank(view);
+      const n = (s) => (all ? s.rank : s.grank);
+      // A group's columns are the sessions that group had a confirmed battle.
+      const ns = all ? R.battleNs : R.battleNs.filter((x) => R.battles.some((b) => b.session_n === x && b.grp === view && b.confirmed_at));
+      const at = ns.map((x) => R.battleNs.indexOf(x));
+      const per = (s) => at.map((i) => s.per[i]);
+      const came = (s) => per(s).filter((v) => v != null).length;
+
+      const [a, b] = rows;
+      if (!ns.length) $('#finding').innerHTML = `<b>${all ? '아직 확정된 배틀 점수가 없어요.' : `${scope} 배틀 점수가 아직 확정되지 않았어요.`}</b> 배틀이 끝나고 운영진이 점수를 확정하면 여기에 쌓여요.`;
+      else if (b && a.total === b.total) $('#finding').innerHTML = `<b>${scope} 1위는 ${esc(wa(a.name))} ${esc(b.name)}, ${D.fmt(a.total)}점으로 같아요.</b>`;
+      else if (b) $('#finding').innerHTML = `<b>${scope} 1위는 ${esc(a.name)} 님이에요.</b> ${esc(b.name)} 님보다 ${D.fmt(a.total - b.total)}점 앞서요. 다음 배틀 점수가 더해지면 바뀔 수 있어요.`;
+      else $('#finding').innerHTML = `<b>${scope} 1위는 ${esc(a.name)} 님이에요.</b>`;
+
+      $('#board-title').textContent = `누적 점수 · ${scope}`;
+      $('#board-meta').textContent = ns.length ? `${ns.map((x) => x + '회차').join('·')} 배틀 합계, 불참은 –${all ? ' · 두 그룹은 클립이 달라요' : ''}` : '확정된 배틀 합계';
+      $('#board thead tr').innerHTML = `<th>순위</th><th>이름</th>${all ? '<th>그룹</th>' : ''}${ns.map((x) => `<th class="r">${x}회차</th>`).join('')}<th class="r">커피</th><th class="r">누적</th><th><span class="sr-only">1위 대비</span></th>`;
       const max = Math.max(1, ...rows.map((s) => s.total));
-      const cols = 6 + R.battleNs.length;
+      const cols = (all ? 6 : 5) + ns.length;
+      const none = all ? '아직 등록된 멤버가 없어요.' : `${scope} 멤버가 아직 없어요.`;
       if (!rows.length) {
-        $('#board tbody').innerHTML = emptyRow(cols, '아직 등록된 멤버가 없어요.');
-        $('#board-list').innerHTML = emptyLi('아직 등록된 멤버가 없어요.');
+        $('#board tbody').innerHTML = emptyRow(cols, none);
+        $('#board-list').innerHTML = emptyLi(none);
       } else {
         $('#board tbody').innerHTML = rows.map((s) => `
           <tr${s.id === mineId ? ' class="mine"' : ''}>
             <td class="rank${s.total && n(s) <= 3 ? ' top' : ''}">${n(s)}</td>
             <td>${who(s)}</td>
-            <td class="muted">${D.groups[s.grp].name}</td>
-            ${s.per.map((v) => `<td class="r">${score(v)}</td>`).join('')}
+            ${all ? `<td class="muted">${D.groups[s.grp].name}</td>` : ''}
+            ${per(s).map((v) => `<td class="r">${score(v)}</td>`).join('')}
             <td class="r">${s.coffee ? `${s.coffee}잔` : '<span class="dash">0</span>'}</td>
             <td class="r"><b>${D.fmt(s.total)}</b></td>
             <td style="width:22%"><span class="bar${n(s) === 1 && s.total ? '' : ' quiet'}"><span style="width:${(s.total / max * 100).toFixed(1)}%"></span></span></td>
           </tr>`).join('');
         $('#board-list').innerHTML = rows.map((s) => `
           <li${s.id === mineId ? ' class="mine"' : ''}><span class="who"><b class="rank${s.total && n(s) <= 3 ? ' top' : ''}">${n(s)}</b>${who(s)}</span>
-            <span class="r"><b>${D.fmt(s.total)}</b><span class="sub">${D.groups[s.grp].name} · ${s.came}회 참여 · 커피 ${s.coffee}잔</span></span></li>`).join('');
+            <span class="r"><b>${D.fmt(s.total)}</b><span class="sub">${all ? `${D.groups[s.grp].name} · ` : ''}${came(s)}회 참여 · 커피 ${s.coffee}잔</span></span></li>`).join('');
       }
       $$('.count').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.view === view)));
     };
-    $$('.count').forEach((c) => c.addEventListener('click', () => { view = c.dataset.view; draw(); }));
+    $$('.count').forEach((c) => c.addEventListener('click', () => { view = c.dataset.view; picked = true; draw(); }));
     boot((data, err) => {
       if (err) {
         $('#finding').textContent = err.message === 'not_configured' ? offline : why(err);
@@ -254,17 +271,12 @@
       $('#n-all').textContent = `${active.length}명`;
       $('#n-tue').textContent = `${active.filter((m) => m.grp === 'tue').length}명`;
       $('#n-wed').textContent = `${active.filter((m) => m.grp === 'wed').length}명`;
-      const [a, b] = R.standings;
-      if (!R.battleNs.length) $('#finding').innerHTML = '<b>아직 확정된 배틀 점수가 없어요.</b> 첫 배틀이 끝나고 운영진이 점수를 확정하면 여기에 쌓여요.';
-      else if (b && a.total === b.total) $('#finding').innerHTML = `<b>${esc(wa(a.name))} ${esc(b.name)}, ${D.fmt(a.total)}점으로 같아요.</b>`;
-      else if (b) $('#finding').innerHTML = `<b>${esc(ga(a.name))} ${esc(b.name)}보다 ${D.fmt(a.total - b.total)}점 앞서요.</b> 다음 배틀 점수가 더해지면 바뀔 수 있어요.`;
-      else $('#finding').innerHTML = `<b>${esc(ga(a.name))} 1위예요.</b>`;
       $('#winners').innerHTML = R.winners.length ? [...R.winners].reverse().map((w) => {
         const s = R.sessions.find((x) => x.n === w.n);
         const line = (g) => {
           const m = R.byId[w[g]];
           if (!m) return `<span class="win faint">${D.weekday[g]} 기록 없음</span>`;
-          return `<span class="win">${D.weekday[g]} ${who(m)} <b class="num">${D.fmt(R.totals[w.n][m.id])}</b>${w.overall === m.id ? ' <span class="pill accent">전체 1등</span>' : ''}</span>`;
+          return `<span class="win">${D.weekday[g]} ${who(m)} <b class="num">${D.fmt(R.totals[w.n][m.id])}</b>${w.overall === m.id ? ' <span class="pill accent">종합 1등</span>' : ''}</span>`;
         };
         return `<li><span><b>${w.n}회차</b><span class="sub">${s ? D.day(D.first(s)) : ''}</span></span><span class="wins">${line('tue')}${line('wed')}</span></li>`;
       }).join('') : emptyLi('확정된 배틀이 생기면 회차마다 그룹 1등이 여기에 남아요.');
@@ -462,7 +474,7 @@
       $('#me-kpis').innerHTML = `
         <div><dt>참여</dt><dd>${mine.size}<small>회</small></dd><p class="cap">${held.length ? `우리 그룹 모임 ${held.length}번 중` : '아직 열린 모임이 없어요'}</p></div>
         <div><dt>누적 점수</dt><dd>${scored ? D.fmt(st.total) : '–'}<small>${scored ? '점' : ''}</small></dd><p class="cap">확정된 배틀 ${R.battleNs.length}번 합계</p></div>
-        <div><dt>순위</dt><dd>${scored ? `${grow.grank}<small>위 / ${gr.length}명</small>` : '–'}</dd><p class="cap">${scored ? `${g.name} 그룹 · 전체 ${st.rank}위` : '첫 배틀이 확정되면 생겨요'}</p></div>
+        <div><dt>순위</dt><dd>${scored ? `${grow.grank}<small>위 / ${gr.length}명</small>` : '–'}</dd><p class="cap">${scored ? `${g.name} 그룹 · 종합 ${st.rank}위` : '첫 배틀이 확정되면 생겨요'}</p></div>
         <div><dt>커피</dt><dd>${st ? st.coffee : 0}<small>잔</small></dd><p class="cap">그룹 1등 한 번에 한 잔</p></div>`;
 
       // My battles, one row per confirmed session.
@@ -565,7 +577,7 @@
       const shown = b.status === 'open' ? b.current_round - 1 : b.current_round;
       let script = null;
       if (shown >= 1) {
-        const { data } = await D.sb.from('clips').select('script').eq('session_n', b.session_n).eq('round', shown).maybeSingle();
+        const { data } = await D.sb.from('clips').select('script').eq('session_n', b.session_n).eq('grp', b.grp).eq('round', shown).maybeSingle();
         script = data && data.script;
       }
       fill('#d-prev-title', shown >= 1 ? `라운드 ${shown} 정답` : '정답');

@@ -78,9 +78,12 @@ window.RTAdmin = (() => {
     </section>
 
     <section class="setting" aria-labelledby="s-clips">
-      <div><h2 id="s-clips">클립과 정답</h2><p>라운드마다 원본 영상·팟캐스트의 출처, 구간, 링크, 정답 스크립트를 적어요. 정답 스크립트로 자동 채점해요.</p></div>
+      <div><h2 id="s-clips">클립과 정답</h2><p>라운드마다 원본 영상·팟캐스트의 출처, 구간, 링크, 정답 스크립트를 적어요. 화요일과 수요일 그룹은 클립을 따로 넣어요. 정답 스크립트로 자동 채점해요.</p></div>
       <div class="panel">
-        <div class="field"><label for="clip-session">Dictation 회차</label><select class="input" id="clip-session" style="max-width:20rem"></select></div>
+        <div class="two" style="max-width:40rem">
+          <div class="field"><label for="clip-session">Dictation 회차</label><select class="input" id="clip-session"></select></div>
+          <div class="field"><label for="clip-group">그룹</label><select class="input" id="clip-group"></select></div>
+        </div>
         <div class="table-frame">
           <table class="data" id="clips">
             <thead><tr><th>라운드</th><th>출처</th><th>구간</th><th>원본 링크</th><th>정답 스크립트</th></tr></thead>
@@ -274,11 +277,22 @@ window.RTAdmin = (() => {
     const pick = $('#clip-session');
     const keep = Number(pick.value) || (dict.find((s) => D.last(s) >= R.today) || dict[dict.length - 1] || {}).n;
     pick.innerHTML = dict.map((s) => `<option value="${s.n}"${s.n === keep ? ' selected' : ''}>${s.n}회차 · ${D.days(s)}</option>`).join('') || '<option value="">Dictation 회차가 없어요</option>';
+    // Each group battles on its own clips; only the groups that meet that session are offered.
+    const gpick = $('#clip-group');
+    const groupsFor = () => {
+      const s = R.sessions.find((x) => x.n === Number(pick.value));
+      const keepG = gpick.value;
+      const gs = s ? ['tue', 'wed'].filter((g) => s[`${g}_date`]) : [];
+      const first = gs.includes(keepG) ? keepG : gs.find((g) => s[`${g}_date`] >= R.today) || gs[0];
+      gpick.innerHTML = gs.map((g) => `<option value="${g}"${g === first ? ' selected' : ''}>${D.groups[g].name} 그룹 · ${D.day(s[`${g}_date`])}</option>`).join('') || '<option value="">–</option>';
+    };
+    groupsFor();
     const drawClips = async () => {
-      const n = Number(pick.value);
+      const n = Number(pick.value), g = gpick.value;
       const s = R.sessions.find((x) => x.n === n);
-      if (!s) { $('#clips tbody').innerHTML = emptyRow(5, 'Dictation 회차를 먼저 만들어 주세요.'); return; }
-      const { data } = await sb.from('clips').select('*').eq('session_n', n);
+      if (!s || !g) { $('#clips tbody').innerHTML = emptyRow(5, 'Dictation 회차를 먼저 만들어 주세요.'); return; }
+      $('#clips-msg').textContent = '';
+      const { data } = await sb.from('clips').select('*').eq('session_n', n).eq('grp', g);
       const by = Object.fromEntries((data || []).map((c) => [c.round, c]));
       $('#clips tbody').innerHTML = Array.from({ length: s.rounds }, (_, i) => {
         const c = by[i + 1] || {};
@@ -289,14 +303,16 @@ window.RTAdmin = (() => {
           <td><input class="input" name="script" lang="en" aria-label="라운드 ${i + 1} 정답 스크립트" value="${esc(c.script || '')}" placeholder="들리는 문장 그대로" style="min-width:18rem"></td></tr>`;
       }).join('');
     };
-    pick.onchange = drawClips;
+    pick.onchange = () => { groupsFor(); drawClips(); };
+    gpick.onchange = drawClips;
     await drawClips();
     $('#clips-save').onclick = async () => {
       if (!(await guard($('#clips-msg')))) return;
-      const n = Number(pick.value);
-      const rows = $$('#clips tbody tr[data-round]').map((tr) => ({ session_n: n, round: Number(tr.dataset.round), source: tr.querySelector('[name=source]').value.trim(), segment: tr.querySelector('[name=segment]').value.trim(), url: tr.querySelector('[name=url]').value.trim() || null, script: tr.querySelector('[name=script]').value.trim() }));
+      const n = Number(pick.value), g = gpick.value;
+      if (!g) return;
+      const rows = $$('#clips tbody tr[data-round]').map((tr) => ({ session_n: n, grp: g, round: Number(tr.dataset.round), source: tr.querySelector('[name=source]').value.trim(), segment: tr.querySelector('[name=segment]').value.trim(), url: tr.querySelector('[name=url]').value.trim() || null, script: tr.querySelector('[name=script]').value.trim() }));
       const { error } = await sb.from('clips').upsert(rows);
-      say($('#clips-msg'), error ? why(error) : `${n}회차 클립 ${rows.filter((r) => r.script).length}개를 저장했어요.`);
+      say($('#clips-msg'), error ? why(error) : `${n}회차 ${D.groups[g].name} 그룹 클립 ${rows.filter((r) => r.script).length}개를 저장했어요.`);
     };
 
     // members, with their phone numbers and login state
@@ -428,7 +444,7 @@ window.RTAdmin = (() => {
       $('#console').hidden = false;
       const { data: code } = await D.sb.from('battle_codes').select('code').eq('session_n', sel.n).eq('grp', sel.grp).maybeSingle();
       $('#code-value').textContent = code ? code.code : '–';
-      const { data: clips } = await D.sb.from('clips').select('*').eq('session_n', sel.n).order('round');
+      const { data: clips } = await D.sb.from('clips').select('*').eq('session_n', sel.n).eq('grp', sel.grp).order('round');
       const board = R.board(b);
       const roundSubs = R.subs.filter((x) => x.session_n === sel.n && x.grp === sel.grp && x.round === b.current_round);
       const clip = (clips || []).find((c) => c.round === (b.status === 'ready' ? 1 : b.current_round)) || null;
