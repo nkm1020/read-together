@@ -21,7 +21,7 @@ window.RTAdmin = (() => {
   const MANAGE = `
   <div class="settings">
     <section class="setting" aria-labelledby="s-sessions">
-      <div><h2 id="s-sessions">회차</h2><p>홀수 회차는 Reading &amp; Discussion, 짝수 회차는 Dictation Battle이에요. 한 그룹만 모이는 주에는 다른 날짜를 비워 두세요. 참여한 멤버는 회차마다 체크해요.</p></div>
+      <div><h2 id="s-sessions">회차</h2><p>홀수 회차는 Reading &amp; Discussion, 짝수 회차는 Dictation Battle이에요. 한 그룹만 모이는 주에는 다른 날짜를 비워 두세요. Reading 회차는 화요일과 수요일 그룹 원문을 따로 넣어요. 참여한 멤버는 회차마다 체크해요.</p></div>
       <div class="panel">
         <div class="table-frame">
           <table class="data" id="sessions-table">
@@ -47,14 +47,29 @@ window.RTAdmin = (() => {
           </div>
           <p class="muted" id="date-hint" style="margin:0;font-size:13px">한 그룹만 모이는 주에는 다른 날짜를 비워 두세요. 둘 중 하나는 있어야 해요.</p>
           <div id="reading-fields" class="stack">
-            <div class="field"><label for="f-title">원문 제목</label><input class="input" id="f-title" name="title" lang="en" placeholder="비워 두면 회차 페이지에 '원문 준비 중'으로 보여요"></div>
-            <div class="two">
-              <div class="field"><label for="f-url">원문 링크</label><input class="input" id="f-url" name="url" type="url" placeholder="https://"></div>
+            <div class="stack art" data-art="tue">
+              <div class="art-head"><p class="label" style="margin:0">화요일 그룹 원문</p></div>
+              <div class="field"><label for="f-tue-title">원문 제목</label><input class="input" id="f-tue-title" name="tue_title" lang="en" placeholder="비워 두면 회차 페이지에 '원문 준비 중'으로 보여요"></div>
               <div class="two">
-                <div class="field"><label for="f-type">종류</label><select class="input" id="f-type" name="atype"><option>기사</option><option>칼럼</option><option>에세이</option></select></div>
-                <div class="field"><label for="f-min">읽는 시간(분)</label><input class="input num" id="f-min" name="minutes" type="number" min="1" max="60"></div>
+                <div class="field"><label for="f-tue-url">원문 링크</label><input class="input" id="f-tue-url" name="tue_url" type="url" placeholder="https://"></div>
+                <div class="two">
+                  <div class="field"><label for="f-tue-type">종류</label><select class="input" id="f-tue-type" name="tue_atype"><option>기사</option><option>칼럼</option><option>에세이</option></select></div>
+                  <div class="field"><label for="f-tue-min">읽는 시간(분)</label><input class="input num" id="f-tue-min" name="tue_minutes" type="number" min="1" max="60"></div>
+                </div>
               </div>
             </div>
+            <div class="stack art" data-art="wed">
+              <div class="art-head"><p class="label" style="margin:0">수요일 그룹 원문</p><button type="button" class="card-link" id="copy-tue">화요일 원문 그대로 쓰기</button></div>
+              <div class="field"><label for="f-wed-title">원문 제목</label><input class="input" id="f-wed-title" name="wed_title" lang="en" placeholder="비워 두면 회차 페이지에 '원문 준비 중'으로 보여요"></div>
+              <div class="two">
+                <div class="field"><label for="f-wed-url">원문 링크</label><input class="input" id="f-wed-url" name="wed_url" type="url" placeholder="https://"></div>
+                <div class="two">
+                  <div class="field"><label for="f-wed-type">종류</label><select class="input" id="f-wed-type" name="wed_atype"><option>기사</option><option>칼럼</option><option>에세이</option></select></div>
+                  <div class="field"><label for="f-wed-min">읽는 시간(분)</label><input class="input num" id="f-wed-min" name="wed_minutes" type="number" min="1" max="60"></div>
+                </div>
+              </div>
+            </div>
+            <p class="muted" id="art-hint" style="margin:0;font-size:13px" hidden>날짜를 넣은 그룹의 원문 칸이 열려요.</p>
           </div>
           <div id="dictation-fields" class="field" hidden><label for="f-rounds">라운드 수</label><input class="input num" id="f-rounds" name="rounds" type="number" min="1" max="20" value="8" style="max-width:8rem"></div>
           <div class="panel-foot" style="justify-content:flex-start"><button type="submit" class="btn btn-primary">회차 저장</button><p class="muted" id="session-msg" role="status"></p></div>
@@ -161,31 +176,41 @@ window.RTAdmin = (() => {
     const phones = await D.rpc('admin_phones').catch(() => []);
     const phoneOf = Object.fromEntries(phones.filter((p) => p.member_id).map((p) => [p.member_id, p]));
     const next = R.sessions.length ? R.sessions[R.sessions.length - 1].n + 1 : 1;
-    const emptyReading = R.sessions.filter((s) => s.kind === 'reading' && !s.article_title && D.first(s) >= R.today)[0];
+    const emptyReading = R.sessions.filter((s) => s.kind === 'reading').flatMap((s) => D.articles(s).filter((a) => !a.title && s[`${a.grp}_date`] >= R.today).map((a) => ({ n: s.n, grp: a.grp })))[0];
     const noPhone = R.members.filter((m) => m.active && !phoneOf[m.id]).length;
-    status.innerHTML = emptyReading ? `<b>${emptyReading.n}회차 원문이 아직 비어 있어요.</b> 모임 일주일 전까지 올려 주세요.`
+    status.innerHTML = emptyReading ? `<b>${emptyReading.n}회차 ${D.groups[emptyReading.grp].name} 그룹 원문이 아직 비어 있어요.</b> 모임 일주일 전까지 올려 주세요.`
       : noPhone ? `<b>휴대폰 번호가 없는 멤버가 ${noPhone}명 있어요.</b> 번호가 있어야 로그인해서 문장을 남기고 배틀에 들어올 수 있어요.`
       : R.sessions.length ? `회차 ${R.sessions.length}개, 멤버 ${R.members.filter((m) => m.active).length}명이 등록돼 있어요.` : '<b>아직 아무 기록이 없어요.</b> 멤버 명단과 첫 회차부터 만들어 주세요.';
 
     // sessions
-    $('#sessions-table tbody').innerHTML = [...R.sessions].reverse().map((s) => `<tr><td><b>${s.n}회차</b></td><td>${s.kind === 'reading' ? 'Reading' : 'Dictation'}</td><td class="num">${D.days(s)}</td><td class="wrap">${s.kind === 'reading' ? esc(s.article_title || '–') : `${s.rounds}라운드`}</td><td class="r"><button type="button" class="card-link" data-attend="${s.n}">${R.present(s.n).length}명 체크</button></td><td class="r"><button type="button" class="card-link" data-edit="${s.n}">고치기</button></td></tr>`).join('') || emptyRow(6, '아직 만든 회차가 없어요.');
+    $('#sessions-table tbody').innerHTML = [...R.sessions].reverse().map((s) => `<tr><td><b>${s.n}회차</b></td><td>${s.kind === 'reading' ? 'Reading' : 'Dictation'}</td><td class="num">${D.days(s)}</td><td class="wrap">${s.kind === 'reading' ? D.articles(s).map((a) => `${D.weekday[a.grp]} ${a.title ? `<span lang="en">${esc(a.title)}</span>` : '<span class="faint">원문 없음</span>'}`).join('<br>') : `${s.rounds}라운드`}</td><td class="r"><button type="button" class="card-link" data-attend="${s.n}">${R.present(s.n).length}명 체크</button></td><td class="r"><button type="button" class="card-link" data-edit="${s.n}">고치기</button></td></tr>`).join('') || emptyRow(6, '아직 만든 회차가 없어요.');
     const form = $('#session-form');
     const fillForm = (s) => {
       form.n.value = s ? s.n : next;
       form.kind.value = s ? s.kind : (next % 2 ? 'reading' : 'dictation');
       form.tue.value = s ? s.tue_date || '' : '';
       form.wed.value = s ? s.wed_date || '' : '';
-      form.title.value = s ? s.article_title || '' : '';
-      form.url.value = s ? s.article_url || '' : '';
-      form.atype.value = s && s.article_type ? s.article_type : '기사';
-      form.minutes.value = s && s.article_minutes ? s.article_minutes : '';
+      ['tue', 'wed'].forEach((g) => {
+        form[`${g}_title`].value = s ? s[`${g}_article_title`] || '' : '';
+        form[`${g}_url`].value = s ? s[`${g}_article_url`] || '' : '';
+        form[`${g}_atype`].value = s && s[`${g}_article_type`] ? s[`${g}_article_type`] : '기사';
+        form[`${g}_minutes`].value = s && s[`${g}_article_minutes`] ? s[`${g}_article_minutes`] : '';
+      });
       form.rounds.value = s ? s.rounds : 8;
       $('#session-form-title').textContent = s ? `${s.n}회차 고치기` : '새 회차';
       form.dispatchEvent(new Event('change'));
     };
     fillForm(null);
     $$('[data-edit]').forEach((btn) => btn.addEventListener('click', () => { fillForm(R.sessions.find((s) => s.n === Number(btn.dataset.edit))); form.scrollIntoView({ block: 'center' }); }));
-    form.onchange = () => { const r = form.kind.value === 'reading'; $('#reading-fields').hidden = !r; $('#dictation-fields').hidden = r; };
+    form.onchange = () => {
+      const r = form.kind.value === 'reading';
+      $('#reading-fields').hidden = !r; $('#dictation-fields').hidden = r;
+      // Only the groups with a date get an article.
+      $$('[data-art]', form).forEach((el) => { el.hidden = !form[el.dataset.art].value; });
+      $('#art-hint').hidden = !!(form.tue.value || form.wed.value);
+      $('#copy-tue').hidden = !form.tue.value;
+    };
+    $('#copy-tue').onclick = () => { ['title', 'url', 'atype', 'minutes'].forEach((k) => { form[`wed_${k}`].value = form[`tue_${k}`].value; }); };
     form.onsubmit = async (e) => {
       e.preventDefault();
       const r = form.kind.value === 'reading';
@@ -193,10 +218,16 @@ window.RTAdmin = (() => {
       if (!tue && !wed) { say($('#session-msg'), '화요일이나 수요일 중 하나는 날짜를 넣어 주세요.'); return; }
       if (tue && wed && wed < tue) { say($('#session-msg'), '수요일 날짜가 화요일보다 앞이에요.'); return; }
       if (!(await guard($('#session-msg')))) return;
+      // Each group that meets keeps its own article; a group without a date has none.
+      const art = (g, on) => ({
+        [`${g}_article_title`]: on ? form[`${g}_title`].value.trim() || null : null,
+        [`${g}_article_url`]: on ? form[`${g}_url`].value.trim() || null : null,
+        [`${g}_article_type`]: on ? form[`${g}_atype`].value : null,
+        [`${g}_article_minutes`]: on && form[`${g}_minutes`].value ? Number(form[`${g}_minutes`].value) : null,
+      });
       const row = {
         n: Number(form.n.value), kind: form.kind.value, tue_date: tue, wed_date: wed,
-        article_title: r ? form.title.value.trim() || null : null, article_url: r ? form.url.value.trim() || null : null,
-        article_type: r ? form.atype.value : null, article_minutes: r && form.minutes.value ? Number(form.minutes.value) : null,
+        ...art('tue', r && tue), ...art('wed', r && wed),
         rounds: Number(form.rounds.value) || 8,
         answers_public_at: r ? null : wed ? `${wed}T19:30:00+09:00` : `${tue}T18:00:00+09:00`,
       };
