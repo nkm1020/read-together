@@ -31,7 +31,7 @@ window.RTAdmin = (() => {
         </div>
         <form id="attend" class="nested stack" hidden>
           <h3 id="attend-title" style="font-size:15px;font-weight:600">참여 멤버</h3>
-          <p class="muted" style="margin:0;font-size:13px">배틀에 입장한 멤버는 자동으로 체크돼요.</p>
+          <p class="muted" style="margin:0;font-size:13px">모임마다 온 멤버를 체크해요. 다른 요일에 온 멤버는 아래 다른 그룹 칸에서, 두 모임에 다 온 멤버는 양쪽에 체크하세요. 배틀에 입장한 멤버는 그 모임에 자동으로 체크돼요.</p>
           <div id="attend-list" class="attend-list"></div>
           <div class="panel-foot"><p class="muted" id="attend-msg" role="status"></p><button type="button" class="btn" id="attend-close">닫기</button><button type="submit" class="btn btn-primary">참여 저장</button></div>
         </form>
@@ -186,7 +186,8 @@ window.RTAdmin = (() => {
       : R.sessions.length ? `회차 ${R.sessions.length}개, 멤버 ${R.members.filter((m) => m.active).length}명이 등록돼 있어요.` : '<b>아직 아무 기록이 없어요.</b> 멤버 명단과 첫 회차부터 만들어 주세요.';
 
     // sessions
-    $('#sessions-table tbody').innerHTML = [...R.sessions].reverse().map((s) => `<tr><td><b>${s.n}회차</b></td><td>${s.kind === 'reading' ? 'Reading' : 'Dictation'}</td><td class="num">${D.days(s)}</td><td class="wrap">${s.kind === 'reading' ? D.articles(s).map((a) => `${D.weekday[a.grp]} ${a.title ? `<span lang="en">${esc(a.title)}</span>` : '<span class="faint">원문 없음</span>'}`).join('<br>') : `${s.rounds}라운드`}</td><td class="r"><button type="button" class="card-link" data-attend="${s.n}">${R.present(s.n).length}명 체크</button></td><td class="r"><button type="button" class="card-link" data-edit="${s.n}">고치기</button></td></tr>`).join('') || emptyRow(6, '아직 만든 회차가 없어요.');
+    const meetings = (s) => ['tue', 'wed'].filter((g) => s[`${g}_date`]);
+    $('#sessions-table tbody').innerHTML = [...R.sessions].reverse().map((s) => `<tr><td><b>${s.n}회차</b></td><td>${s.kind === 'reading' ? 'Reading' : 'Dictation'}</td><td class="num">${D.days(s)}</td><td class="wrap">${s.kind === 'reading' ? D.articles(s).map((a) => `${D.weekday[a.grp]} ${a.title ? `<span lang="en">${esc(a.title)}</span>` : '<span class="faint">원문 없음</span>'}`).join('<br>') : `${s.rounds}라운드`}</td><td class="r"><button type="button" class="card-link" data-attend="${s.n}">${meetings(s).map((g) => `${D.weekday[g]} ${R.present(s.n, g).length}`).join(' · ')}명 체크</button></td><td class="r"><button type="button" class="card-link" data-edit="${s.n}">고치기</button></td></tr>`).join('') || emptyRow(6, '아직 만든 회차가 없어요.');
     const form = $('#session-form');
     const fillForm = (s) => {
       form.n.value = s ? s.n : next;
@@ -244,12 +245,18 @@ window.RTAdmin = (() => {
     $$('[data-attend]').forEach((btn) => btn.addEventListener('click', () => {
       const n = Number(btn.dataset.attend);
       const s = R.sessions.find((x) => x.n === n);
-      const here = new Set(R.present(n).map((m) => m.id));
-      const people = R.members.filter((m) => m.active || here.has(m.id));
-      const group = (g) => people.filter((m) => m.grp === g).map((m) => `<label class="pick-name"><input type="checkbox" value="${m.id}"${here.has(m.id) ? ' checked' : ''}> ${who(m)}</label>`).join('');
+      const marked = new Set(R.attendance.filter((a) => a.session_n === n).map((a) => `${a.grp}:${a.member_id}`));
+      const people = R.members.filter((m) => m.active || [...marked].some((k) => k.endsWith(`:${m.id}`)));
+      const box = (g, m) => `<label class="pick-name"><input type="checkbox" value="${g}:${m.id}"${marked.has(`${g}:${m.id}`) ? ' checked' : ''}> ${who(m)}</label>`;
+      const meeting = (g) => {
+        const own = people.filter((m) => m.grp === g), guests = people.filter((m) => m.grp !== g);
+        const o = g === 'tue' ? 'wed' : 'tue';
+        return `<div><p class="label">${D.groups[g].name} 모임 · ${D.day(s[`${g}_date`])}</p>${own.map((m) => box(g, m)).join('') || '<p class="faint">없음</p>'}`
+          + (guests.length ? `<p class="label faint" style="margin-top:8px">다른 그룹(${D.groups[o].name})에서 온 멤버</p>${guests.map((m) => box(g, m)).join('')}` : '') + '</div>';
+      };
       $('#attend-title').textContent = `${n}회차 참여 멤버 · ${D.days(s)}`;
       $('#attend-list').innerHTML = people.length
-        ? `<div><p class="label">화요일 그룹</p>${group('tue') || '<p class="faint">없음</p>'}</div><div><p class="label">수요일 그룹</p>${group('wed') || '<p class="faint">없음</p>'}</div>`
+        ? meetings(s).map(meeting).join('')
         : '<p class="faint">멤버 명단을 먼저 만들어 주세요.</p>';
       $('#attend-msg').textContent = '';
       attend.dataset.n = n;
@@ -261,14 +268,21 @@ window.RTAdmin = (() => {
       e.preventDefault();
       if (!(await guard($('#attend-msg')))) return;
       const n = Number(attend.dataset.n);
-      const was = new Set(R.present(n).map((m) => m.id));
+      // Ticks are "group:member" pairs, one per meeting a member came to.
+      const was = new Set(R.attendance.filter((a) => a.session_n === n).map((a) => `${a.grp}:${a.member_id}`));
       const now = new Set($$('#attend-list input:checked').map((i) => i.value));
-      const add = [...now].filter((id) => !was.has(id)).map((id) => ({ session_n: n, member_id: id }));
-      const drop = [...was].filter((id) => !now.has(id));
+      const split = (k) => { const [grp, member_id] = k.split(':'); return { session_n: n, grp, member_id }; };
+      const add = [...now].filter((k) => !was.has(k)).map(split);
+      const drop = [...was].filter((k) => !now.has(k)).map(split);
       let error = null;
       if (add.length) ({ error } = await sb.from('attendance').upsert(add));
-      if (!error && drop.length) ({ error } = await sb.from('attendance').delete().eq('session_n', n).in('member_id', drop));
-      say($('#attend-msg'), error ? why(error) : `${n}회차 참여 ${now.size}명을 저장했어요.`);
+      for (const g of ['tue', 'wed']) {
+        const ids = drop.filter((d) => d.grp === g).map((d) => d.member_id);
+        if (!error && ids.length) ({ error } = await sb.from('attendance').delete().eq('session_n', n).eq('grp', g).in('member_id', ids));
+      }
+      const count = (g) => [...now].filter((k) => k.startsWith(`${g}:`)).length;
+      const s = R.sessions.find((x) => x.n === n);
+      say($('#attend-msg'), error ? why(error) : `${n}회차 참여를 저장했어요. ${meetings(s).map((g) => `${D.groups[g].name} ${count(g)}명`).join(', ')}.`);
       if (!error) setTimeout(manage, 600);
     };
 
@@ -491,11 +505,11 @@ window.RTAdmin = (() => {
       $('#replay').textContent = b.plays < 2 ? `다시 재생 표시 (${2 - b.plays}번 남음)` : '두 번 다 들려줬어요';
       $('#replay').onclick = () => update({ plays: Math.min(2, b.plays + 1) });
 
-      $('#submits').innerHTML = R.members.filter((m) => m.active && m.grp === sel.grp).map((m) => {
+      $('#submits').innerHTML = R.members.filter((m) => (m.active && m.grp === sel.grp) || board.some((x) => x.id === m.id)).map((m) => {
         const here = board.find((x) => x.id === m.id);
         const done = roundSubs.find((x) => x.member_id === m.id);
         const st = !here ? '<span class="faint">입장 안 함</span>' : b.status !== 'open' ? '<span class="pill">입장</span>' : done ? '<span class="pill positive">냈어요</span>' : '<span class="pill">입력 중</span>';
-        return `<li><span>${who(m)}${here ? `<span class="sub" style="margin:6px 0 0 36px">${U.strip(here.rounds, s.rounds, b)}</span>` : ''}</span>${st}</li>`;
+        return `<li><span>${who(m)}${m.grp !== sel.grp ? ` <span class="faint">${D.groups[m.grp].name} 그룹</span>` : ''}${here ? `<span class="sub" style="margin:6px 0 0 36px">${U.strip(here.rounds, s.rounds, b)}</span>` : ''}</span>${st}</li>`;
       }).join('') || emptyLi('이 그룹 명단이 비어 있어요.');
 
       $('#round-list').innerHTML = Array.from({ length: s.rounds }, (_, i) => {

@@ -30,13 +30,13 @@
   const RELOGIN = '로그인이 풀렸어요. 다시 로그인한 뒤 저장을 다시 눌러 주세요.';
   const ERR = {
     code: '코드가 달라요. 진행자 화면의 네 자리 숫자를 확인해 주세요.',
-    member: '이 배틀은 다른 그룹 배틀이에요. 내 그룹 코드인지 확인해 주세요.',
+    member: '활동 중인 멤버만 들어올 수 있어요. 운영진에게 말해 주세요.',
     closed: '지금은 제출할 수 없어요. 진행자가 라운드를 열면 다시 내 주세요.',
     not_joined: '먼저 입장해 주세요.',
     already: '이번 라운드는 이미 냈어요.',
     no_script: '이 라운드의 정답 스크립트가 아직 없어요. 진행자에게 알려 주세요.',
     session: '문장을 남길 수 있는 회차가 아니에요.',
-    session_group: '내 그룹이 모이지 않는 회차예요. 내 그룹 원문에 남겨 주세요.',
+    session_group: '그 그룹이 모이지 않는 회차예요.',
     admin: '운영진만 할 수 있어요.',
     not_signed_in: '로그인이 필요해요.',
     taken: '다른 멤버가 쓰는 이름이에요. 다른 이름을 골라 주세요.',
@@ -221,11 +221,17 @@
       const scope = all ? '종합' : `${D.groups[view].name} 그룹`;
       const rows = all ? R.standings : R.groupRank(view);
       const n = (s) => (all ? s.rank : s.grank);
-      // A group's columns are the sessions that group had a confirmed battle.
-      const ns = all ? R.battleNs : R.battleNs.filter((x) => R.battles.some((b) => b.session_n === x && b.grp === view && b.confirmed_at));
+      // A group's columns are the sessions its members have a score in.
+      const ns = all ? R.battleNs : R.battleNs.filter((x) => rows.some((s) => R.totals[x][s.id] != null));
       const at = ns.map((x) => R.battleNs.indexOf(x));
       const per = (s) => at.map((i) => s.per[i]);
       const came = (s) => per(s).filter((v) => v != null).length;
+      // A score from the other group's battle carries that day's mark.
+      const cell = (x, s) => {
+        const v = R.totals[x][s.id], g = R.from[x][s.id];
+        if (v == null) return score(v);
+        return g !== s.grp ? `<span class="faint" title="${D.groups[g].name} 모임 배틀">${D.weekday[g]}</span> ${D.fmt(v)}` : D.fmt(v);
+      };
 
       const [a, b] = rows;
       if (!ns.length) $('#finding').innerHTML = `<b>${all ? '아직 확정된 배틀 점수가 없어요.' : `${scope} 배틀 점수가 아직 확정되지 않았어요.`}</b> 배틀이 끝나고 운영진이 점수를 확정하면 여기에 쌓여요.`;
@@ -248,7 +254,7 @@
             <td class="rank${s.total && n(s) <= 3 ? ' top' : ''}">${n(s)}</td>
             <td>${who(s)}</td>
             ${all ? `<td class="muted">${D.groups[s.grp].name}</td>` : ''}
-            ${per(s).map((v) => `<td class="r">${score(v)}</td>`).join('')}
+            ${ns.map((x) => `<td class="r">${cell(x, s)}</td>`).join('')}
             <td class="r">${s.coffee ? `${s.coffee}잔` : '<span class="dash">0</span>'}</td>
             <td class="r"><b>${D.fmt(s.total)}</b></td>
             <td style="width:22%"><span class="bar${n(s) === 1 && s.total ? '' : ' quiet'}"><span style="width:${(s.total / max * 100).toFixed(1)}%"></span></span></td>
@@ -276,7 +282,7 @@
         const line = (g) => {
           const m = R.byId[w[g]];
           if (!m) return `<span class="win faint">${D.weekday[g]} 기록 없음</span>`;
-          return `<span class="win">${D.weekday[g]} ${who(m)} <b class="num">${D.fmt(R.totals[w.n][m.id])}</b>${w.overall === m.id ? ' <span class="pill accent">종합 1등</span>' : ''}</span>`;
+          return `<span class="win">${D.weekday[g]} ${who(m)} <b class="num">${D.fmt(R.room[R.key(w.n, g)][m.id])}</b>${w.overall === m.id ? ' <span class="pill accent">종합 1등</span>' : ''}</span>`;
         };
         return `<li><span><b>${w.n}회차</b><span class="sub">${s ? D.day(D.first(s)) : ''}</span></span><span class="wins">${line('tue')}${line('wed')}</span></li>`;
       }).join('') : emptyLi('확정된 배틀이 생기면 회차마다 그룹 1등이 여기에 남아요.');
@@ -328,7 +334,7 @@
       const art = D.article(cur, grp);
       const isOpen = (s) => { const d = deadline(s, grp); return !d || Date.now() < d.at.getTime(); };
       const mine = me && me.member_id ? R.byId[me.member_id] : null;
-      const other = !!mine && mine.grp !== grp; // a member looking at the other group's article
+      const other = !!mine && mine.grp !== grp; // a member on the other group's article, e.g. the day they went there
       $('#obj-cover').src = dict ? 'assets/blind-typist-miss-cora-filton-lccn2016878328.jpg' : 'assets/reader-square.jpg';
       // A reading session is named by the group's article; the kind moves to the line under it.
       const titled = !dict && art && art.title;
@@ -339,17 +345,19 @@
       fill('#obj-actions', dict
         ? '<a class="btn" href="/dashboard">대시보드</a><a class="btn btn-primary" href="/battle">배틀 입장</a>'
         : !date ? ''
-        : `${art.url ? `<a class="btn" href="${esc(art.url)}" rel="noopener">원문 읽기</a>` : ''}${other ? '' : isOpen(cur) ? '<a class="btn btn-primary" href="#last-title">문장 남기기</a>' : '<span class="closed-note">문장 받기가 마감됐어요</span>'}`);
+        : `${art.url ? `<a class="btn" href="${esc(art.url)}" rel="noopener">원문 읽기</a>` : ''}${isOpen(cur) ? '<a class="btn btn-primary" href="#last-title">문장 남기기</a>' : '<span class="closed-note">문장 받기가 마감됐어요</span>'}`);
 
       // Three figures about this session, for the group on show.
       const inGroup = (m) => m.grp === grp;
-      const came = R.present(cur.n).filter(inGroup);
+      // Who came to this group's meeting, including members of the other group who came that day.
+      const came = R.present(cur.n, grp);
+      const guests = came.filter((m) => !inGroup(m)).length;
       const said = R.sentences.filter((x) => x.session_n === cur.n && x.grp === grp);
       const active = R.members.filter((m) => m.active && inGroup(m)).length;
       const due = deadline(cur, grp);
       $('#kpis').innerHTML = dict
         ? `<div><dt>라운드</dt><dd>${cur.rounds}<small>라운드</small></dd><p class="cap">클립마다 진행자 스피커로 2번</p></div>
-           <div><dt>참여한 멤버</dt><dd>${came.length}<small>/ ${active}명</small></dd><p class="cap">${G.name} 그룹 · 배틀에 입장하면 자동으로 체크돼요</p></div>
+           <div><dt>참여한 멤버</dt><dd>${came.length}<small>/ ${active}명</small></dd><p class="cap">${G.name} 모임${guests ? ` · 다른 그룹 ${guests}명 포함` : ''} · 배틀에 입장하면 자동으로 체크돼요</p></div>
            <div><dt>정답 공개</dt><dd>${D.day(D.last(cur))}</dd><p class="cap">${cur.wed_date ? '수요일' : '화요일'} 모임이 끝난 뒤</p></div>`
         : `<div><dt>원문</dt><dd>${art && art.type ? esc(art.type) : '–'}<small>${art && art.minutes ? `${art.minutes}분` : ''}</small></dd><p class="cap">${!date ? '이번 회차에 모이지 않아요' : art.title ? '읽는 시간 기준' : '관리자가 곧 올려요'}</p></div>
            <div><dt>남긴 문장</dt><dd>${said.length}<small>/ ${active}명</small></dd><p class="cap">${G.name} 그룹</p></div>
@@ -370,23 +378,23 @@
         fill('#sentences', list.length ? list.map((x) => `<li><blockquote lang="en">${esc(x.body)}</blockquote>${x.reason ? `<p class="muted">${esc(x.reason)}</p>` : ''}${who(R.byId[x.member_id])}</li>`).join('') : emptyLi('아직 남긴 문장이 없어요.'));
         const open = isOpen(reading);
         const shut = deadline(reading, grp);
-        $('#write-closed').hidden = open && !other;
+        $('#write-closed').hidden = open;
         if (!open) $('#write-closed').textContent = `${D.day(shut.date)} ${shut.time}, ${shut.next.n}회차가 시작되면서 문장 받기가 마감됐어요.`;
-        else if (other) $('#write-closed').textContent = `${G.name} 그룹 원문이에요. 내 문장은 ${D.groups[mine.grp].name} 그룹 원문에 남겨요.`;
-        $('#write').hidden = !open || !mine || other;
+        $('#write').hidden = !open || !mine;
         $('#write-login').hidden = !open || !!(me && me.member_id);
         if (open && me && !me.member_id) {
           $('#write-login-text').textContent = '로그인한 번호가 아직 멤버 명단과 연결되지 않았어요. 관리자에게 말해 주세요.';
           $('#write-login [data-login]').hidden = true;
         }
-        if (open && mine && !other) {
+        // A member may leave a sentence on the other group's article too, when they went to that meeting.
+        if (open && mine) {
           const left = list.find((x) => x.member_id === mine.id);
-          $('#w-who').innerHTML = `<b>${esc(mine.name)}</b> 님으로 남겨요.${left ? ' 이미 남긴 문장이 있어서, 다시 내면 바뀌어요.' : ''}${shut ? ` ${D.day(shut.date)} ${shut.time}, ${shut.next.n}회차가 시작되기 전까지 남길 수 있어요.` : ''}`;
+          $('#w-who').innerHTML = `<b>${esc(mine.name)}</b> 님으로 ${other ? `${G.name} 그룹 원문에 ` : ''}남겨요.${left ? ' 이미 남긴 문장이 있어서, 다시 내면 바뀌어요.' : ''}${shut ? ` ${D.day(shut.date)} ${shut.time}, ${shut.next.n}회차가 시작되기 전까지 남길 수 있어요.` : ''}`;
           $('#write').onsubmit = async (e) => {
             e.preventDefault();
             const msg = $('#w-msg');
             try {
-              await D.rpc('leave_sentence', { p_session: reading.n, p_body: $('#w-body').value, p_reason: $('#w-reason').value });
+              await D.rpc('leave_sentence', { p_session: reading.n, p_grp: grp, p_body: $('#w-body').value, p_reason: $('#w-reason').value });
               msg.textContent = '남겼어요. 다시 내면 바뀌어요.';
               $('#w-body').value = ''; $('#w-reason').value = '';
             } catch (er) { msg.textContent = /check/.test(er.message) ? '문장은 3자 이상 400자 이하로 적어 주세요.' : er.message === 'not_signed_in' ? RELOGIN : why(er); }
@@ -467,29 +475,38 @@
       // Four figures: how often I came, my score, where it puts me, and coffee won.
       const mine = new Set(R.attendance.filter((a) => a.member_id === m.id).map((a) => a.session_n));
       const held = R.sessions.filter((s) => dateOf(s) && dateOf(s) <= R.today);
+      // Sessions I came to my own group's meeting, and sessions I only came to the other group's.
+      const own = R.sessions.filter((s) => R.cameTo(s.n, m.id).includes(m.grp)).length;
+      const away = R.sessions.filter((s) => { const w = R.cameTo(s.n, m.id); return w.length && !w.includes(m.grp); }).length;
       const st = R.standings.find((x) => x.id === m.id);
       const gr = R.groupRank(m.grp);
       const grow = gr.find((x) => x.id === m.id);
       const scored = !!(st && st.total);
       $('#me-kpis').innerHTML = `
-        <div><dt>참여</dt><dd>${mine.size}<small>회</small></dd><p class="cap">${held.length ? `우리 그룹 모임 ${held.length}번 중` : '아직 열린 모임이 없어요'}</p></div>
+        <div><dt>참여</dt><dd>${mine.size}<small>회</small></dd><p class="cap">${away ? `우리 그룹 모임 ${own}번 · 다른 요일 ${away}번` : held.length ? `우리 그룹 모임 ${held.length}번 중` : '아직 열린 모임이 없어요'}</p></div>
         <div><dt>누적 점수</dt><dd>${scored ? D.fmt(st.total) : '–'}<small>${scored ? '점' : ''}</small></dd><p class="cap">확정된 배틀 ${R.battleNs.length}번 합계</p></div>
         <div><dt>순위</dt><dd>${scored ? `${grow.grank}<small>위 / ${gr.length}명</small>` : '–'}</dd><p class="cap">${scored ? `${g.name} 그룹 · 종합 ${st.rank}위` : '첫 배틀이 확정되면 생겨요'}</p></div>
-        <div><dt>커피</dt><dd>${st ? st.coffee : 0}<small>잔</small></dd><p class="cap">그룹 1등 한 번에 한 잔</p></div>`;
+        <div><dt>커피</dt><dd>${st ? st.coffee : 0}<small>잔</small></dd><p class="cap">모임 배틀 1등 한 번에 한 잔</p></div>`;
 
       // My battles, one row per confirmed session.
       const rows = R.battleNs.map((n) => {
         const t = R.totals[n];
         const s = R.sessions.find((x) => x.n === n);
-        const bt = R.battles.find((x) => x.session_n === n && x.grp === m.grp);
-        const myRounds = R.subs.filter((x) => x.session_n === n && x.grp === m.grp && x.member_id === m.id).sort((p, q) => p.round - q.round);
-        const day = `<td><b>${n}회차</b></td><td class="num muted">${s ? D.days(s) : ''}</td>`;
+        // The battle that counts for me: my group's, or the other group's when I only played there.
+        const played = R.subs.filter((x) => x.session_n === n && x.member_id === m.id).map((x) => x.grp);
+        const bg = (R.from[n] || {})[m.id] || (played.includes(m.grp) ? m.grp : played[0]) || m.grp;
+        const bt = R.battles.find((x) => x.session_n === n && x.grp === bg);
+        const myRounds = R.subs.filter((x) => x.session_n === n && x.grp === bg && x.member_id === m.id).sort((p, q) => p.round - q.round);
+        const where = s ? (bg === m.grp ? D.days(s) : `${D.weekday[bg]} ${D.day(s[`${bg}_date`])} · 다른 요일`) : '';
+        const day = `<td><b>${n}회차</b></td><td class="num muted">${where}</td>`;
         if (t[m.id] == null && bt && !bt.confirmed_at && myRounds.length) return `<tr>${day}<td>${strip(myRounds, s ? s.rounds : 8, bt)}</td><td class="r faint">${D.fmt(myRounds.reduce((a, x) => a + x.total, 0))}</td><td class="r dash">–</td><td class="r"><span class="pill">${bt.status === 'finished' ? '확정 전' : '진행 중'}</span></td></tr>`;
         if (t[m.id] == null) return `<tr>${day}<td><span class="dash">${bt ? '불참' : '우리 그룹 배틀 없음'}</span></td><td class="r dash">–</td><td class="r dash">–</td><td class="r"></td></tr>`;
         const same = Object.keys(t).filter((id) => R.byId[id] && R.byId[id].grp === m.grp).sort((a, b) => t[b] - t[a]);
         const place = same.filter((id) => t[id] > t[m.id]).length + 1;
-        const won = (R.winners.find((w) => w.n === n) || {})[m.grp] === m.id;
-        return `<tr><td><b>${n}회차</b></td><td class="num muted">${s ? D.days(s) : ''}</td><td>${strip(myRounds, s ? s.rounds : 8, bt)}</td><td class="r"><b>${D.fmt(t[m.id])}</b></td><td class="r">${place}위 <span class="faint">/ ${same.length}명</span></td><td class="r">${won ? '<span class="pill accent">그룹 1등</span>' : ''}</td></tr>`;
+        const w = R.winners.find((x) => x.n === n) || {};
+        // Coffee is per meeting; name the day when I won a battle other than the one shown here.
+        const won = ['tue', 'wed'].filter((g) => w[g] === m.id).map((g) => `<span class="pill accent">${g === bg ? '' : `${D.weekday[g]} `}모임 1등</span>`).join(' ');
+        return `<tr>${day}<td>${strip(myRounds, s ? s.rounds : 8, bt)}</td><td class="r"><b>${D.fmt(t[m.id])}</b></td><td class="r">${place}위 <span class="faint">/ ${same.length}명</span></td><td class="r">${won}</td></tr>`;
       });
       fill('#battles tbody', rows.join('') || emptyRow(6, '확정된 배틀이 생기면 회차마다 내 점수가 여기에 쌓여요.'));
       fill('#battles-key', rows.length ? stripKey : '');
@@ -511,11 +528,16 @@
         : `<p class="faint" style="margin:0">${g.name} 그룹의 다음 모임이 아직 정해지지 않았어요.</p>`);
 
       // Sessions my group met, ticked when I came.
-      const mineSessions = R.sessions.filter((s) => dateOf(s)).reverse();
+      const mineSessions = R.sessions.filter((s) => dateOf(s) || mine.has(s.n)).reverse();
       fill('#me-came', mineSessions.length ? mineSessions.map((s) => {
-        const upcoming = dateOf(s) > R.today;
-        const mark = mine.has(s.n) ? '<span class="pill positive">참여</span>' : upcoming ? '<span class="faint">예정</span>' : '<span class="faint">불참</span>';
-        return `<li><span><b>${s.n}회차</b><span class="sub">${s.kind === 'reading' ? 'Reading' : 'Dictation'} · ${D.day(dateOf(s))}</span></span>${mark}</li>`;
+        const went = R.cameTo(s.n, m.id);
+        const other = went.find((x) => x !== m.grp);
+        const d = (went.length && !went.includes(m.grp) ? s[`${other}_date`] : dateOf(s)) || s[`${went[0]}_date`];
+        const mark = went.length > 1 ? '<span class="pill positive">두 모임 참여</span>'
+          : other ? `<span class="pill positive">${D.weekday[other]} 모임 참여</span>`
+          : went.length ? '<span class="pill positive">참여</span>'
+          : d > R.today ? '<span class="faint">예정</span>' : '<span class="faint">불참</span>';
+        return `<li><span><b>${s.n}회차</b><span class="sub">${s.kind === 'reading' ? 'Reading' : 'Dictation'} · ${D.day(d)}</span></span>${mark}</li>`;
       }).join('') : emptyLi('우리 그룹 회차가 생기면 여기에 보여요.'));
 
       // Change my own display name.

@@ -60,20 +60,28 @@ window.DB = (() => {
     const key = (s, g) => `${s}:${g}`;
     const isConfirmed = new Set(confirmed.map((b) => key(b.session_n, b.grp)));
 
-    // Session totals from confirmed battles only: { n: { memberId: total } }
-    const totals = {};
-    subs.filter((x) => isConfirmed.has(key(x.session_n, x.grp))).forEach((x) => {
-      totals[x.session_n] = totals[x.session_n] || {};
-      totals[x.session_n][x.member_id] = (totals[x.session_n][x.member_id] || 0) + x.total;
+    // Each confirmed battle's totals: { 'n:grp': { memberId: total } }. Members may play in the other group's battle.
+    const room = {};
+    subs.filter((x) => isConfirmed.has(key(x.session_n, x.grp)) && byId[x.member_id]).forEach((x) => {
+      const k = key(x.session_n, x.grp);
+      room[k] = room[k] || {};
+      room[k][x.member_id] = (room[k][x.member_id] || 0) + x.total;
+    });
+    // Session totals count one battle per member: their own group's, or the other group's when that is the only one
+    // they played. totals: { n: { memberId: total } }, from: { n: { memberId: grp of the battle counted } }
+    const totals = {}, from = {};
+    Object.entries(room).forEach(([k, t]) => {
+      const [n, g] = k.split(':');
+      totals[n] = totals[n] || {}; from[n] = from[n] || {};
+      Object.entries(t).forEach(([id, v]) => {
+        if (totals[n][id] == null || g === byId[id].grp) { totals[n][id] = v; from[n][id] = g; }
+      });
     });
     const battleNs = Object.keys(totals).map(Number).sort((a, b) => a - b);
 
-    const winners = battleNs.map((n) => {
-      const t = totals[n];
-      const best = (ids) => ids.filter((id) => t[id] != null).sort((a, b) => t[b] - t[a])[0] || null;
-      const ids = Object.keys(t).filter((id) => byId[id]);
-      return { n, tue: best(ids.filter((id) => byId[id].grp === 'tue')), wed: best(ids.filter((id) => byId[id].grp === 'wed')), overall: best(ids) };
-    });
+    // Coffee goes to the winner of each group's battle, whoever's group they are in.
+    const top = (t) => (t ? Object.keys(t).sort((a, b) => t[b] - t[a])[0] || null : null);
+    const winners = battleNs.map((n) => ({ n, tue: top(room[key(n, 'tue')]), wed: top(room[key(n, 'wed')]), overall: top(totals[n]) }));
 
     const standings = members.filter((m) => m.active || battleNs.some((n) => totals[n][m.id] != null)).map((m) => {
       const per = battleNs.map((n) => (totals[n][m.id] != null ? totals[n][m.id] : null));
@@ -85,8 +93,11 @@ window.DB = (() => {
     standings.forEach((s, i) => { s.rank = i + 1; });
     const groupRank = (g) => standings.filter((s) => s.grp === g).map((s, i) => ({ ...s, grank: i + 1 }));
 
-    // Who took part in each session, as the organisers ticked it (battle entries tick themselves).
-    const present = (n) => attendance.filter((a) => a.session_n === n && byId[a.member_id]).map((a) => byId[a.member_id]);
+    // Who came to a session, as the organisers ticked it (battle entries tick themselves). Attendance is kept per
+    // meeting, so pass a group for one meeting; without it, everyone who came to either meeting, once each.
+    const present = (n, g) => [...new Set(attendance.filter((a) => a.session_n === n && (!g || a.grp === g) && byId[a.member_id]).map((a) => a.member_id))].map((id) => byId[id]);
+    // Which meetings of a session a member came to: ['tue'], ['wed', 'tue'] …
+    const cameTo = (n, id) => attendance.filter((a) => a.session_n === n && a.member_id === id).map((a) => a.grp);
 
     // The session happening now or next, by date.
     const today = todayISO();
@@ -104,7 +115,7 @@ window.DB = (() => {
       }).sort((p, q) => q.total - p.total || p.name.localeCompare(q.name, 'ko'));
     };
 
-    return { groups, members, byId, sessions, battles, subs, sentences, joins, attendance, present, totals, battleNs, winners, standings, groupRank, current, liveBattle, board, today };
+    return { groups, members, byId, sessions, battles, subs, sentences, joins, attendance, present, cameTo, room, totals, from, battleNs, winners, standings, groupRank, current, liveBattle, board, today, key };
   }
 
   // ---------- the member who is logged in ----------
